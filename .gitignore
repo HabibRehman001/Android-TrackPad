@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Local extracted deps / caches (not source)
+.local-pkgs/
+
+# Android / Gradle
+android/.gradle/
+android/**/build/
+android/local.properties
+android/.cxx/
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# IDE / editor junk
+.idea/
+*.iml
+.vscode/
+*.swp
+*~
+Untitled
+**/Untitled
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Captures / logs
+*.log
+captures/

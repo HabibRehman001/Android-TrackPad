@@ -5,6 +5,8 @@ acceleration) happens on the phone, where the user can control it live.
 This file just executes whatever the phone already decided.
 """
 
+import time
+
 from pynput.mouse import Controller, Button
 from packet import (
     TYPE_MOVE,
@@ -17,6 +19,9 @@ from packet import (
 
 mouse = Controller()
 
+# Two discrete clicks work more reliably on Linux/X11 than click(..., 2).
+_DOUBLE_CLICK_GAP_S = 0.06
+
 
 def handle_packet(packet: dict):
     ptype = packet["type"]
@@ -26,7 +31,9 @@ def handle_packet(packet: dict):
     elif ptype == TYPE_CLICK:
         mouse.click(Button.left, 1)
     elif ptype == TYPE_DOUBLE_CLICK:
-        mouse.click(Button.left, 2)
+        mouse.click(Button.left, 1)
+        time.sleep(_DOUBLE_CLICK_GAP_S)
+        mouse.click(Button.left, 1)
     elif ptype == TYPE_RIGHT_CLICK:
         mouse.click(Button.right, 1)
     elif ptype == TYPE_MIDDLE_CLICK:

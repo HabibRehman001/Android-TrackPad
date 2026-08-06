@@ -4,7 +4,11 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 PKG="$ROOT/.local-pkgs"
 ANDROID_HOME="${ANDROID_HOME:-$HOME/android-dev/sdk}"
 
+# Don't let an active venv hide system / local packages (causes missing 'six', etc.)
+unset VIRTUAL_ENV
 export PYTHONPATH="$PKG/usr/lib/python3/dist-packages${PYTHONPATH:+:$PYTHONPATH}"
+PYTHON="${PYTHON:-/usr/bin/python3}"
+
 # Prefer Google's platform-tools when present
 if [ -x "$ANDROID_HOME/platform-tools/adb" ]; then
   export PATH="$ANDROID_HOME/platform-tools:$PATH"
@@ -15,7 +19,8 @@ fi
 
 case "${1:-server}" in
   server)
-    exec python3 "$ROOT/server.py"
+    export DISPLAY="${DISPLAY:-:0}"
+    exec "$PYTHON" -u "$ROOT/server.py"
     ;;
   adb)
     shift

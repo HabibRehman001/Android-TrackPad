@@ -1,21 +1,18 @@
 package com.example.phonetrackpad
 
+import android.os.Handler
+import android.os.Looper
 import kotlin.math.abs
+import kotlin.math.hypot
 
 /**
  * Turns raw finger positions into high-level gestures and packets.
  *
- * Called from TouchpadView's onTouchEvent for every real hardware touch
- * sample (up to 240/sec), not once per display frame. Two things that
- * matter specifically because of that high sample rate:
- *
- * - Fractional-pixel carry: at 240Hz each individual sample's movement
- *   is often well under a pixel. Naively rounding every sample to an
- *   int would silently drop most of a slow drag's motion. Instead we
- *   accumulate the remainder and only emit whole pixels once they add
- *   up - same idea as Bresenham's line algorithm.
- * - Every value is read fresh from SettingsStore.current on each call,
- *   so a slider drag changes feel on the very next sample, live.
+ * Double-tap: the first tap does NOT fire a click immediately. A single
+ * click is deferred until [DOUBLE_TAP_MS] elapses with no second tap.
+ * If a second tap lands in time nearby, the pending click is cancelled
+ * and one DoubleClick packet is sent instead — otherwise Linux apps see
+ * "click then double-click" (three press events) which feels broken.
  */
 class GestureProcessor(private val onPacket: (Packet) -> Unit) {
 
@@ -24,25 +21,24 @@ class GestureProcessor(private val onPacket: (Packet) -> Unit) {
 
     private data class Point(val x: Float, val y: Float, val t: Long)
 
-    // one-finger state
     private var downPoint: Point? = null
     private var lastMove: Point? = null
     private var moved = false
     private var lastTapUpTime = 0L
     private var lastTapUpPoint: Point? = null
 
-    // two-finger state
     private var lastTwoFingerY: Float? = null
     private var twoFingerDownAt = 0L
     private var twoFingerMoved = false
 
-    // fractional-pixel carry (see class doc)
     private var carryX = 0f
     private var carryY = 0f
 
-    // smoothing history - window size itself is user-controlled
     private val recentDx = ArrayDeque<Float>()
     private val recentDy = ArrayDeque<Float>()
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var pendingClick: Runnable? = null
 
     fun onFingerDown(x: Float, y: Float) {
         mode = Mode.ONE_FINGER
@@ -55,11 +51,12 @@ class GestureProcessor(private val onPacket: (Packet) -> Unit) {
     }
 
     fun onSecondFingerDown() {
+        cancelPendingClick()
+        lastTapUpPoint = null
         mode = Mode.TWO_FINGER
         lastTwoFingerY = null
         twoFingerDownAt = System.currentTimeMillis()
         twoFingerMoved = false
-        // A second finger landing cancels whatever one-finger tap/drag was in progress.
         downPoint = null
         lastMove = null
         moved = false
@@ -78,7 +75,11 @@ class GestureProcessor(private val onPacket: (Packet) -> Unit) {
             moved = true
         }
         lastMove = Point(x, y, now)
-        if (!moved) return // could still resolve to a tap on finger-up
+        if (!moved) return
+
+        // Dragging cancels a waiting single-click from a previous tap
+        cancelPendingClick()
+        lastTapUpPoint = null
 
         var dx = rawDx * settings.sensitivity
         var dy = rawDy * settings.sensitivity
@@ -116,7 +117,6 @@ class GestureProcessor(private val onPacket: (Packet) -> Unit) {
         lastTwoFingerY = avgY
     }
 
-    /** Called on ACTION_UP, or ACTION_POINTER_UP when we were in two-finger mode. */
     fun onGestureEnd(x: Float, y: Float) {
         when (mode) {
             Mode.ONE_FINGER -> resolveOneFingerTap(x, y)
@@ -130,6 +130,7 @@ class GestureProcessor(private val onPacket: (Packet) -> Unit) {
     }
 
     fun onGestureCancel() {
+        cancelPendingClick()
         reset()
     }
 
@@ -140,21 +141,38 @@ class GestureProcessor(private val onPacket: (Packet) -> Unit) {
 
         if (!moved && duration < LONG_PRESS_MS) {
             val prevTap = lastTapUpPoint
-            if (prevTap != null &&
+            val isDouble = prevTap != null &&
                 now - lastTapUpTime < DOUBLE_TAP_MS &&
-                abs(x - prevTap.x) < TOUCH_SLOP * 2 &&
-                abs(y - prevTap.y) < TOUCH_SLOP * 2
-            ) {
+                hypot(x - prevTap.x, y - prevTap.y) < DOUBLE_TAP_SLOP
+
+            if (isDouble) {
+                cancelPendingClick()
                 onPacket(Packet.DoubleClick)
-                lastTapUpPoint = null // consumed - don't chain into a triple-tap
+                lastTapUpPoint = null
+                lastTapUpTime = 0L
             } else {
-                onPacket(Packet.Click)
+                // Defer single click so a quick second tap can become a double-click
+                cancelPendingClick()
                 lastTapUpPoint = Point(x, y, now)
                 lastTapUpTime = now
+                val click = Runnable {
+                    pendingClick = null
+                    lastTapUpPoint = null
+                    onPacket(Packet.Click)
+                }
+                pendingClick = click
+                handler.postDelayed(click, DOUBLE_TAP_MS)
             }
         } else if (!moved && duration >= LONG_PRESS_MS) {
+            cancelPendingClick()
+            lastTapUpPoint = null
             onPacket(Packet.RightClick)
         }
+    }
+
+    private fun cancelPendingClick() {
+        pendingClick?.let { handler.removeCallbacks(it) }
+        pendingClick = null
     }
 
     private fun reset() {
@@ -177,9 +195,10 @@ class GestureProcessor(private val onPacket: (Packet) -> Unit) {
     }
 
     companion object {
-        private const val TOUCH_SLOP = 4f      // px of wiggle allowed before it counts as a drag
+        private const val TOUCH_SLOP = 6f
+        private const val DOUBLE_TAP_SLOP = 48f  // how far apart the two taps may land
         private const val LONG_PRESS_MS = 500L
-        private const val DOUBLE_TAP_MS = 300L
+        private const val DOUBLE_TAP_MS = 450L   // also the single-click defer delay
         private const val SCROLL_DIVISOR = 3f
     }
 }
