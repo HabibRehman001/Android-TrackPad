@@ -44,7 +44,7 @@ def main():
     server_socket.bind((HOST, PORT))
     server_socket.listen(1)
     print(f"[server] Listening on {HOST}:{PORT}")
-    print(f"[server] Run 'adb reverse tcp:{PORT} tcp:{PORT}' then open the app on your phone.")
+    print(f"[server] Run 'adb reverse tcp:{PORT} tcp:{PORT}'")
 
     try:
         while True:

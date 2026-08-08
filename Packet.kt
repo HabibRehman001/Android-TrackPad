@@ -9,7 +9,7 @@ package com.example.phonetrackpad
  * Fixed-size framing means the desktop side never has to guess where one
  * packet ends and the next begins - no JSON, no delimiter, no string
  * parsing. That matters at up to 240 samples/sec: JSON's allocation and
- * text encoding is exactly the kind of per-event overhead you don't want
+ * text encoding is exactly the k5ind of per-event overhead you don't want
  * on this hot path.
  */
 const val PACKET_SIZE = 5

@@ -26,11 +26,15 @@ android/.cxx/
 # IDE / editor junk
 .idea/
 *.iml
-.vscode/
+.vscode/*
+!.vscode/settings.json
 *.swp
 *~
 Untitled
 **/Untitled
+
+# Local pip target (if used)
+.python-packages/
 
 # OS
 .DS_Store
